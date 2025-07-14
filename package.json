@@ -1,0 +1,36 @@
+{
+  "name": "eelctrontranscribe",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/main/main.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:renderer": "tsc -p tsconfig.renderer.json && cp renderer/renderer/renderer.js renderer/renderer.js",
+    "start": "npm run build && npm run build:renderer && electron .",
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-bedrock": "^3.844.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.844.0",
+    "@aws-sdk/client-transcribe-streaming": "^3.844.0",
+    "@types/dotenv": "^8.2.3",
+    "aws-sdk": "^2.1692.0",
+    "dotenv": "^17.2.0",
+    "electron": "^37.2.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^24.0.13",
+    "jest": "^30.0.4",
+    "jsdom": "^26.1.0",
+    "ts-jest": "^29.4.0",
+    "typescript": "^5.8.3"
+  }
+}

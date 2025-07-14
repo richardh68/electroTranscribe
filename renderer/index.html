@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Electron Transcribe</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    #transcription { border: 1px solid #ccc; padding: 1em; min-height: 2em; margin-bottom: 1em; white-space: pre-line; }
+    #vocab-list { margin-top: 1em; }
+    .vocab-item { display: flex; align-items: center; margin-bottom: 0.5em; }
+    .vocab-item span { flex: 1; }
+    .vocab-item button { margin-left: 1em; }
+    #recording-indicator {
+      display: none;
+      align-items: center;
+      color: #c00;
+      font-weight: bold;
+      margin-bottom: 1em;
+    }
+    #recording-dot {
+      width: 12px;
+      height: 12px;
+      background: #c00;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 8px;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
+    #stop-btn { display: none; margin-left: 1em; }
+  </style>
+</head>
+<body>
+  <h1>Electron Speech-to-Text</h1>
+  <div id="recording-indicator"><span id="recording-dot"></span>Recording...</div>
+  <button id="record-btn">Start Recording</button>
+  <button id="stop-btn">Stop</button>
+  <div style="margin-bottom: 1em;">
+    <label for="model-select">LLM Model:</label>
+    <select id="model-select"></select>
+  </div>
+  <div id="transcription"></div>
+  <div id="llm-response" style="border:1px solid #ccc; padding:1em; min-height:2em; margin-top:1em; background:#f9f9f9;"></div>
+  <h2>Custom Vocabulary</h2>
+  <form id="vocab-form">
+    <input id="vocab-input" placeholder="Add phrase..." required />
+    <button type="submit">Add</button>
+  </form>
+  <div id="vocab-list"></div>
+  <script src="renderer.js"></script>
+</body>
+</html> 
