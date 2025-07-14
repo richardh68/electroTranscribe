@@ -7,6 +7,7 @@ import { PassThrough } from 'stream';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedrock';
 import { awsConfig } from '../config/aws';
+import { mcpManager, McpServerConfig } from '../src/mcpManager';
 
 // Event emitter for audio events
 export const audioEventEmitter = new EventEmitter();
@@ -74,6 +75,42 @@ if (process.env.NODE_ENV !== 'test') {
     await fetchBedrockModels();
     createWindow();
     // Bedrock Runtime does not support model listing, so we use staticModels
+  });
+
+  // MCP server management IPC handlers
+  ipcMain.handle('mcp-list-servers', () => {
+    return mcpManager.listServers();
+  });
+  ipcMain.handle('mcp-add-server', (_event, name: string, config: McpServerConfig) => {
+    mcpManager.addServer(name, config);
+    return mcpManager.listServers();
+  });
+  ipcMain.handle('mcp-remove-server', (_event, name: string) => {
+    mcpManager.removeServer(name);
+    return mcpManager.listServers();
+  });
+  ipcMain.handle('mcp-launch-server', (_event, name: string) => {
+    return mcpManager.launchServer(name);
+  });
+  ipcMain.handle('mcp-stop-server', (_event, name: string) => {
+    return mcpManager.stopServer(name);
+  });
+  ipcMain.handle('mcp-send-to-server', (_event, name: string, message: string) => {
+    return mcpManager.sendToServer(name, message);
+  });
+
+  // Relay MCP server events to renderer
+  mcpManager.on('server-stdout', (name, data) => {
+    if (mainWindow) mainWindow.webContents.send('mcp-server-stdout', { name, data });
+  });
+  mcpManager.on('server-stderr', (name, data) => {
+    if (mainWindow) mainWindow.webContents.send('mcp-server-stderr', { name, data });
+  });
+  mcpManager.on('server-exit', (name, code) => {
+    if (mainWindow) mainWindow.webContents.send('mcp-server-exit', { name, code });
+  });
+  mcpManager.on('servers-updated', (servers) => {
+    if (mainWindow) mainWindow.webContents.send('mcp-servers-updated', servers);
   });
 
   // IPC handlers for vocabulary management

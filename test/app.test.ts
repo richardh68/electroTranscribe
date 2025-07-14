@@ -1,3 +1,16 @@
+// Mock Electron's ipcMain and BrowserWindow for tests
+jest.mock('electron', () => ({
+  ipcMain: {
+    handle: jest.fn(),
+    on: jest.fn(),
+  },
+  BrowserWindow: jest.fn().mockImplementation(() => ({
+    loadFile: jest.fn(),
+    webContents: { send: jest.fn() },
+  })),
+  app: { whenReady: () => Promise.resolve() },
+}));
+
 import { describe, it, expect } from '@jest/globals';
 import { ipcMain } from 'electron';
 import * as mainModule from '../main/main';
