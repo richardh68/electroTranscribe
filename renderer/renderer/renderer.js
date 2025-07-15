@@ -90,6 +90,9 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
             stopMicrophone();
             console.log('[RENDERER] Microphone stopped after grace period');
+            // After stopping, trigger LLM only once with the final transcript
+            pendingLLM = true;
+            // The next transcription-received event will trigger the LLM call
         }, 1000); // 1000ms grace period
         console.log('[RENDERER] Sent stop-audio-recording IPC');
         setRecordingState(false);
@@ -113,33 +116,39 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     // Listen for transcription events from main
     let fullTranscript = '';
+    let pendingLLM = false;
+    let lastLLMTranscript = '';
     ipcRenderer.on('transcription-received', async (_event, transcript) => {
         console.log('[RENDERER] Received transcription:', transcript);
         // Overwrite the container with the latest full transcribed text
         fullTranscript = transcript;
         transcriptionDiv.textContent = fullTranscript;
         transcriptionDiv.scrollTop = transcriptionDiv.scrollHeight;
-        llmResponseDiv.textContent = '...';
-        if (selectedModelId && fullTranscript.trim()) {
-            const response = await ipcRenderer.invoke('invoke-bedrock-llm', { modelId: selectedModelId, prompt: fullTranscript });
-            if (response && response.completion) {
-                llmResponseDiv.textContent = response.completion;
-            }
-            else if (response && response.generations && response.generations[0]) {
-                llmResponseDiv.textContent = response.generations[0].text;
-            }
-            else if (response && response.results && response.results[0]) {
-                llmResponseDiv.textContent = response.results[0].outputText;
-            }
-            else if (response && response.error) {
-                llmResponseDiv.textContent = '[LLM Error] ' + response.error;
+        // Only show LLM response if we are at the end (after stop)
+        if (pendingLLM) {
+            llmResponseDiv.textContent = '...';
+            if (selectedModelId && fullTranscript.trim()) {
+                const response = await ipcRenderer.invoke('invoke-bedrock-llm', { modelId: selectedModelId, prompt: fullTranscript });
+                if (response && response.completion) {
+                    llmResponseDiv.textContent = response.completion;
+                }
+                else if (response && response.generations && response.generations[0]) {
+                    llmResponseDiv.textContent = response.generations[0].text;
+                }
+                else if (response && response.results && response.results[0]) {
+                    llmResponseDiv.textContent = response.results[0].outputText;
+                }
+                else if (response && response.error) {
+                    llmResponseDiv.textContent = '[LLM Error] ' + response.error;
+                }
+                else {
+                    llmResponseDiv.textContent = '[No LLM response]';
+                }
             }
             else {
-                llmResponseDiv.textContent = '[No LLM response]';
+                llmResponseDiv.textContent = '';
             }
-        }
-        else {
-            llmResponseDiv.textContent = '';
+            pendingLLM = false;
         }
     });
     // Vocabulary management
@@ -171,6 +180,122 @@ document.addEventListener('DOMContentLoaded', () => {
     ipcRenderer.on('vocabulary-updated', (_event, vocab) => {
         renderVocabList(vocab);
     });
+    // MCP Server Management UI
+    const mcpListDiv = document.createElement('div');
+    mcpListDiv.id = 'mcp-list';
+    const mcpAddForm = document.createElement('form');
+    mcpAddForm.innerHTML = `
+    <input id="mcp-name" placeholder="Server Name" required />
+    <input id="mcp-command" placeholder="Command" required />
+    <input id="mcp-args" placeholder="Args (space-separated)" />
+    <textarea id="mcp-env" placeholder="Env JSON (optional)"></textarea>
+    <button type="submit">Add MCP Server</button>
+  `;
+    const mcpTerminalDiv = document.createElement('div');
+    mcpTerminalDiv.id = 'mcp-terminal';
+    mcpTerminalDiv.style.border = '1px solid #ccc';
+    mcpTerminalDiv.style.padding = '1em';
+    mcpTerminalDiv.style.height = '200px';
+    mcpTerminalDiv.style.overflowY = 'auto';
+    mcpTerminalDiv.style.background = '#111';
+    mcpTerminalDiv.style.color = '#0f0';
+    const mcpInputForm = document.createElement('form');
+    mcpInputForm.innerHTML = `<input id="mcp-input" placeholder="Send to MCP..." style="width:80%" /><button type="submit">Send</button>`;
+    document.body.appendChild(document.createElement('hr'));
+    document.body.appendChild(document.createElement('h2')).textContent = 'MCP Servers';
+    document.body.appendChild(mcpListDiv);
+    document.body.appendChild(mcpAddForm);
+    document.body.appendChild(mcpTerminalDiv);
+    document.body.appendChild(mcpInputForm);
+    let mcpServers = {};
+    let selectedMcp = null;
+    function renderMcpList() {
+        mcpListDiv.innerHTML = '';
+        Object.entries(mcpServers).forEach(([name, config]) => {
+            const div = document.createElement('div');
+            div.style.marginBottom = '0.5em';
+            const label = document.createElement('span');
+            label.textContent = name + ' (' + config.command + ') ';
+            div.appendChild(label);
+            const launchBtn = document.createElement('button');
+            launchBtn.textContent = 'Launch';
+            launchBtn.onclick = async () => {
+                selectedMcp = name;
+                mcpTerminalDiv.textContent = '';
+                await ipcRenderer.invoke('mcp-launch-server', name);
+            };
+            div.appendChild(launchBtn);
+            const stopBtn = document.createElement('button');
+            stopBtn.textContent = 'Stop';
+            stopBtn.onclick = async () => {
+                await ipcRenderer.invoke('mcp-stop-server', name);
+            };
+            div.appendChild(stopBtn);
+            const removeBtn = document.createElement('button');
+            removeBtn.textContent = 'Remove';
+            removeBtn.onclick = async () => {
+                await ipcRenderer.invoke('mcp-remove-server', name);
+                await loadMcpServers();
+            };
+            div.appendChild(removeBtn);
+            div.appendChild(document.createElement('br'));
+            div.appendChild(document.createElement('small')).textContent = JSON.stringify(config);
+            mcpListDiv.appendChild(div);
+        });
+    }
+    async function loadMcpServers() {
+        mcpServers = await ipcRenderer.invoke('mcp-list-servers');
+        renderMcpList();
+    }
+    mcpAddForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('mcp-name').value.trim();
+        const command = document.getElementById('mcp-command').value.trim();
+        const args = document.getElementById('mcp-args').value.trim().split(' ').filter(Boolean);
+        let env = {};
+        try {
+            const envStr = document.getElementById('mcp-env').value.trim();
+            env = envStr ? JSON.parse(envStr) : {};
+        }
+        catch (err) {
+            alert('Invalid env JSON');
+            return;
+        }
+        await ipcRenderer.invoke('mcp-add-server', name, { command, args, env });
+        await loadMcpServers();
+        mcpAddForm.reset();
+    };
+    mcpInputForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const input = document.getElementById('mcp-input').value;
+        if (selectedMcp && input.trim()) {
+            await ipcRenderer.invoke('mcp-send-to-server', selectedMcp, input);
+            document.getElementById('mcp-input').value = '';
+        }
+    };
+    ipcRenderer.on('mcp-server-stdout', (_event, { name, data }) => {
+        if (name === selectedMcp) {
+            mcpTerminalDiv.textContent += data;
+            mcpTerminalDiv.scrollTop = mcpTerminalDiv.scrollHeight;
+        }
+    });
+    ipcRenderer.on('mcp-server-stderr', (_event, { name, data }) => {
+        if (name === selectedMcp) {
+            mcpTerminalDiv.textContent += '[stderr] ' + data;
+            mcpTerminalDiv.scrollTop = mcpTerminalDiv.scrollHeight;
+        }
+    });
+    ipcRenderer.on('mcp-server-exit', (_event, { name, code }) => {
+        if (name === selectedMcp) {
+            mcpTerminalDiv.textContent += `\n[process exited with code ${code}]\n`;
+            mcpTerminalDiv.scrollTop = mcpTerminalDiv.scrollHeight;
+        }
+    });
+    ipcRenderer.on('mcp-servers-updated', async (_event, servers) => {
+        mcpServers = servers;
+        renderMcpList();
+    });
+    loadMcpServers();
     // Initial load
     ipcRenderer.invoke('get-vocabularies').then(renderVocabList);
     setRecordingState(false);

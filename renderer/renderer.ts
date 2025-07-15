@@ -285,25 +285,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  ipcRenderer.on('mcp-server-stdout', (_event: any, { name, data }) => {
+  ipcRenderer.on('mcp-server-stdout', (_event: any, { name, data }: { name: string; data: string }) => {
     if (name === selectedMcp) {
       mcpTerminalDiv.textContent += data;
       mcpTerminalDiv.scrollTop = mcpTerminalDiv.scrollHeight;
     }
   });
-  ipcRenderer.on('mcp-server-stderr', (_event: any, { name, data }) => {
+  ipcRenderer.on('mcp-server-stderr', (_event: any, { name, data }: { name: string; data: string }) => {
     if (name === selectedMcp) {
       mcpTerminalDiv.textContent += '[stderr] ' + data;
       mcpTerminalDiv.scrollTop = mcpTerminalDiv.scrollHeight;
     }
   });
-  ipcRenderer.on('mcp-server-exit', (_event: any, { name, code }) => {
+  ipcRenderer.on('mcp-server-exit', (_event: any, { name, code }: { name: string; code: number }) => {
     if (name === selectedMcp) {
       mcpTerminalDiv.textContent += `\n[process exited with code ${code}]\n`;
       mcpTerminalDiv.scrollTop = mcpTerminalDiv.scrollHeight;
     }
   });
-  ipcRenderer.on('mcp-servers-updated', async (_event: any, servers) => {
+  ipcRenderer.on('mcp-servers-updated', async (_event: any, servers: Record<string, any>) => {
     mcpServers = servers;
     renderMcpList();
   });

@@ -11,6 +11,20 @@ jest.mock('electron', () => ({
   app: { whenReady: () => Promise.resolve() },
 }));
 
+// Mock AWS TranscribeStreamingClient for tests
+jest.mock('@aws-sdk/client-transcribe-streaming', () => ({
+  TranscribeStreamingClient: jest.fn().mockImplementation(() => ({
+    send: jest.fn().mockImplementation(async () => ({
+      TranscriptResultStream: [
+        { TranscriptEvent: { Transcript: { Results: [
+          { Alternatives: [{ Transcript: 'simulated transcript' }] }
+        ] } } }
+      ]
+    })),
+  })),
+  StartStreamTranscriptionCommand: jest.fn(),
+}));
+
 import { describe, it, expect } from '@jest/globals';
 import { ipcMain } from 'electron';
 import * as mainModule from '../main/main';
@@ -84,12 +98,14 @@ describe('AWS Transcribe Streaming', () => {
   it('should stop the stream cleanly', () => {
     const transcribe = new TranscribeStream();
     const { Readable } = require('stream');
+    // Patch dummyStream with an end() method to match PassThrough interface
     const dummyStream = new Readable({
       read() {
         this.push(Buffer.from([1, 2, 3]));
         this.push(null);
       },
     });
+    dummyStream.end = () => {}; // Add no-op end method for test
     transcribe.start(dummyStream);
     transcribe.stop();
     expect(transcribe['audioStream']).toBeNull();
